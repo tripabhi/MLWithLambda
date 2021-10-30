@@ -1,11 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models.mobilenet import mobilenet_v2
 
 
 def get_models(name):
     if name == "mobilenet":
         return MobileNet()
+    elif name == '4-layer':
+        return SimpleNet4()
     elif name == "resnet18":
         return resnet18()
     elif name == "resnet50":
@@ -28,6 +31,22 @@ class MobileNetBlock(nn.Module):
         out = F.relu(self.bn2(self.conv2(out)))
         return out
 
+class SimpleNet4(nn.Module):
+
+    def __init__(self, num_classes = 10, num_input = 28 * 28):
+        super(SimpleNet4, self).__init__()
+        self.fc1 = nn.Linear(num_input, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, 64)
+        self.fc4 = nn.Linear(64, 10)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
+        return F.log_softmax(x, dim=1)
+
 
 class MobileNet(nn.Module):
     # (128,2) means conv planes=128, conv stride=2, by default conv stride=1
@@ -35,9 +54,9 @@ class MobileNet(nn.Module):
 
     def __init__(self, num_classes=10):
         super(MobileNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.layers = self._make_layers(in_planes=32)
+        self.conv1 = nn.Conv2d(1, 28, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(28)
+        self.layers = self._make_layers(in_planes=28)
         self.linear = nn.Linear(1024, num_classes)
 
     def _make_layers(self, in_planes):

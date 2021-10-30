@@ -94,7 +94,7 @@ def lambda_handler(event, context):
     # Loss and Optimizer
     # Softmax is internally computed.
     # Set parameters to be updated.
-    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
     # load checkpoint model if it is not the first round
     if start_epoch != 0:
@@ -107,10 +107,10 @@ def lambda_handler(event, context):
         print("load checkpoint model at epoch {}".format(start_epoch - 1))
 
     for epoch in range(start_epoch, min(start_epoch + run_epochs, n_epochs)):
-
+        
         train_loss, train_acc = train_one_epoch(epoch, net, train_loader, optimizer, worker_index,
-                                                communicator, optim, sync_mode)
-        test_loss, test_acc = test(epoch, net, test_loader)
+                                                communicator, optim, sync_mode, model_name)
+        test_loss, test_acc = test(epoch, net, test_loader, model_name)
 
         print('Epoch: {}/{},'.format(epoch + 1, n_epochs),
               'train loss: {}'.format(train_loss),
@@ -135,7 +135,7 @@ def lambda_handler(event, context):
 
         if worker_index == 0:
             torch.save(checkpoint_model, os.path.join(local_dir, checked_file))
-            storage.upload_file(cp_bucket, checked_file, os.path.join(local_dir, checked_file))
+            storage.upload(cp_bucket, checked_file, os.path.join(local_dir, checked_file))
             print("checkpoint model at epoch {} saved!".format(epoch))
 
         print("Invoking the next round of functions. round: {}/{}, start epoch: {}, run epoch: {}"
@@ -173,7 +173,7 @@ def lambda_handler(event, context):
 
 # Train
 def train_one_epoch(epoch, net, train_loader, optimizer, worker_index,
-                    communicator, optim, sync_mode):
+                    communicator, optim, sync_mode, model_name):
     assert isinstance(communicator, S3Communicator)
     net.train()
 
@@ -187,7 +187,10 @@ def train_one_epoch(epoch, net, train_loader, optimizer, worker_index,
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         batch_start = time.time()
-        outputs = net(inputs)
+        mod_inputs = inputs
+        if(model_name == '4-layer'):
+            mod_inputs = inputs.view(-1, 28*28)
+        outputs = net(mod_inputs)
         loss = F.cross_entropy(outputs, targets)
 
         optimizer.zero_grad()
@@ -239,7 +242,7 @@ def train_one_epoch(epoch, net, train_loader, optimizer, worker_index,
             epoch_cal_time += batch_cal_time
 
         train_acc.update(outputs, targets)
-        train_loss.update(loss.item(), inputs.size(0))
+        train_loss.update(loss.item(), mod_inputs.size(0))
 
         if batch_idx % 10 == 0:
             print("Epoch: [{}], Batch: [{}], train loss: {}, train acc: {}, batch cost {} s, "
@@ -282,7 +285,7 @@ def train_one_epoch(epoch, net, train_loader, optimizer, worker_index,
     return train_loss, train_acc
 
 
-def test(epoch, net, test_loader):
+def test(epoch, net, test_loader, model_name):
     # global best_acc
     net.eval()
     test_loss = Average()
@@ -290,11 +293,15 @@ def test(epoch, net, test_loader):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
-            outputs = net(inputs)
+
+            mod_inputs = inputs
+            if(model_name == '4-layer'):
+                mod_inputs = inputs.view(-1, 28*28)
+            outputs = net(mod_inputs)
 
             loss = F.cross_entropy(outputs, targets)
 
-            test_loss.update(loss.item(), inputs.size(0))
+            test_loss.update(loss.item(), mod_inputs.size(0))
             test_acc.update(outputs, targets)
 
     return test_loss, test_acc
