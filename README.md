@@ -1,4 +1,4 @@
-# lambda-ml-a
+# MLWithLambda
 
 This project contains source code and supporting files for a serverless application for classifying handwritten digits using a Machine Learning model in [PyTorch](https://pytorch.org/). It includes the following files and folders:
 
